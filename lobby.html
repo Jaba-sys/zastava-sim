@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Застава — лобби</title>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1113">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Застава">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap&subset=cyrillic,latin" rel="stylesheet">
+
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/lobby.css">
+</head>
+<body class="lobby">
+
+<!-- Левая панель вкладок. Узкая полоска значков; наведёшь мышь — раскрывается
+     с подписями, как в браузерных шутерах вроде kour.io. На телефоне
+     наведения нет — там она превращается в нижнюю строку вкладок. -->
+<nav class="rail" id="rail" aria-label="Разделы">
+  <div class="rail-logo"><b>З</b><span>Застава</span></div>
+
+  <button class="tab on" data-tab="play" type="button">
+    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    <span><b>Играть</b><i>общий сервер, комнаты, карты</i></span>
+  </button>
+  <button class="tab" data-tab="weapons" type="button">
+    <svg viewBox="0 0 24 24"><path d="M2 10h14l2-2h4v3h-3l-1 1v2h-4l-1 3h-4l1-3H4l-2-2z"/></svg>
+    <span><b>Оружие</b><i>магазин, характеристики, скины</i></span>
+  </button>
+  <button class="tab" data-tab="inventory" type="button">
+    <svg viewBox="0 0 24 24"><path d="M4 7h16v13H4zM9 4h6v3H9zM4 12h16"/></svg>
+    <span><b>Инвентарь</b><i>набор в бой и коллекция</i></span>
+  </button>
+  <button class="tab" data-tab="friends" type="button">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-4 3-6 7-6s7 2 7 6M16 4.5a3.5 3.5 0 010 7M18 14c2.5.6 4 2.6 4 6"/></svg>
+    <span><b>Друзья</b><i>кто в сети, позвать в бой</i></span>
+    <em class="badge" id="friendBadge" hidden></em>
+  </button>
+  <button class="tab" data-tab="account" type="button">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+    <span><b>Аккаунт</b><i>уровень, позывной, вход</i></span>
+  </button>
+  <button class="tab" data-tab="settings" type="button">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+    <span><b>Настройки</b><i>мышь, обзор, прицел, графика</i></span>
+  </button>
+
+  <button class="tab admin-tab" data-tab="console" type="button" hidden>
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>
+    <span><b>Консоль</b><i>администрирование серверов</i></span>
+  </button>
+
+  <div class="rail-foot">
+    <div class="rail-coins"><b id="railCoins">0</b><span>монет</span></div>
+  </div>
+</nav>
+
+<div class="lobby-shell">
+
+  <header class="top">
+    <div class="me">
+      <div class="lvl" id="lvlBadge" title="Уровень">1</div>
+      <div>
+        <h1 id="who">—</h1>
+        <span id="tag"></span>
+        <div class="xp"><u><i id="xpBar"></i></u><em id="xpText">0 / 80</em></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="sPoints">0</b><span>очки</span></div>
+      <div class="stat"><b id="sKills">0</b><span>убийства</span></div>
+      <div class="stat"><b id="sMatches">0</b><span>матчи</span></div>
+      <div class="stat"><b id="sRatio">0</b><span>у/с</span></div>
+      <div class="stat coins"><b id="sCoins">0</b><span>монеты</span></div>
+    </div>
+  </header>
+
+  <!-- Блокировка «с плашкой»: мигает сверху, пока блокировка действует. -->
+  <div class="ban-flash" id="banFlash" hidden>
+    <b>Вы были заблокированы администрацией за нарушение правил</b>
+    <span id="banReason"></span>
+  </div>
+
+  <div class="note" id="note"></div>
+
+  <div class="rtdb-note" id="rtdbNote">
+    <b>Не задан адрес Realtime Database.</b>
+    В <code>js/config.js</code> пустое поле <code>databaseURL</code>. Если база уже
+    создана — её адрес показан в консоли Firebase на вкладке
+    Realtime Database → Data, над деревом данных. Если базы ещё нет:
+    Build → Realtime Database → Create Database → регион <code>europe-west1</code>
+    → Start in locked mode, а правила взять из <code>database.rules.json</code>.
+    Без адреса матч не запустится: по этой базе ходят позиции игроков.
+  </div>
+
+  <!-- ============================ ИГРАТЬ ============================ -->
+  <section class="view on" data-view="play">
+    <!-- Твой боец на подиуме — как на главном экране браузерных шутеров. -->
+    <div class="hero">
+      <div class="agent-stage">
+        <canvas id="agentCanvas"></canvas>
+        <div class="agent-side" id="agentSide">
+          <button type="button" data-team="a">Террорист</button>
+          <button type="button" data-team="b">Спецназ</button>
+        </div>
+        <p class="stage-hint">покрути мышью</p>
+      </div>
+      <div class="hero-side">
+        <span class="hero-kicker">Твой боец</span>
+        <b class="hero-name" id="heroName">—</b>
+        <span class="hero-weapon" id="heroWeapon"></span>
+        <button class="main-server" id="mainServerBtn" type="button">
+          <span class="ms-flag">24/7</span>
+          <b>Играть — общий сервер</b>
+          <i id="mainServerLine">Заминирование · террористы против спецназа, круглосуточно</i>
+          <u id="mainServerSeats">—</u>
+        </button>
+        <div class="hero-actions">
+          <button class="btn btn-main" id="openCreate" type="button">Создать комнату</button>
+          <button class="btn btn-ghost" id="heroArmory" type="button">Оружие и скины</button>
+        </div>
+        <div class="hero-join">
+          <span>Зайти к своим</span>
+          <div class="join-row">
+            <input id="codeInput" maxlength="5" placeholder="Код комнаты" autocomplete="off" spellcheck="false">
+            <button class="btn btn-ghost" id="joinBtn" type="button">Войти</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Персонажи: у каждого свой вид; чем дороже — тем быстрее бегает. -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Персонажи</h2>
+        <span class="armory-hint" style="margin:0">чем дороже персонаж, тем быстрее он бегает</span>
+      </div>
+      <div class="agents" id="agents"></div>
+      <div class="note" id="agentNote"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Открытые комнаты</h2>
+      <div class="rooms" id="rooms">
+        <p class="empty">Смотрим, кто играет…</p>
+      </div>
+    </section>
+  </section>
+
+  <!-- Создание комнаты: окно с тремя вопросами — карта, режим, кого пускать. -->
+  <div class="modal" id="createModal" hidden>
+    <div class="modal-box">
+      <div class="panel-head">
+        <h2>Новая комната</h2>
+        <button class="link" id="closeCreate" type="button">закрыть ✕</button>
+      </div>
+
+      <h3 class="sub">1. Карта</h3>
+      <div class="maps-grid" id="maps"></div>
+      <!-- Своя карта: загрузить файл из редактора (только в приложении) -->
+      <div class="custom-drop" id="customDrop" hidden>
+        <input type="file" id="customFile" accept=".json,.zmap,application/json" hidden>
+        <div class="custom-zone" id="customZone">
+          <b id="customTitle">Перетащи сюда файл карты</b>
+          <span id="customSub">файл <code>.zmap.json</code> из редактора карт — или <button class="link" id="customPick" type="button">выбери на компьютере</button></span>
+        </div>
+        <label class="custom-bots"><input type="checkbox" id="customBots" checked> Боты на карте (их считает твой компьютер)</label>
+        <p class="custom-note">Свою карту держит <b>твой компьютер</b>: он ведёт раунды, бомбу и ботов. Друзья заходят к тебе по коду прямо из браузера и скачивают карту сами. Закроешь приложение — комната переходит к другому игроку или закрывается.</p>
+      </div>
+
+      <h3 class="sub">2. Режим</h3>
+      <div class="modes" id="modes"></div>
+      <div class="side-pick" id="sidePick" hidden>
+        <span>Сторона</span>
+        <div class="sides" id="sides"></div>
+      </div>
+
+      <h3 class="sub">3. Кто может зайти</h3>
+      <div class="access" id="access">
+        <button type="button" class="access-opt on" data-priv="1">
+          <b>По коду</b><i>комнаты нет в списке — войдут те, кому ты дашь код</i>
+        </button>
+        <button type="button" class="access-opt" data-priv="0">
+          <b>Любой</b><i>комната видна всем в «Открытых комнатах»</i>
+        </button>
+      </div>
+      <div class="room-setup">
+        <div class="setup-row">
+          <span>Сколько игроков</span>
+          <div class="sizes" id="sizes"></div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-main" id="createBtn" type="button">Создать и зайти</button>
+        <button class="btn btn-ghost" id="cancelCreate" type="button">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Своя карта на сайте: только в приложении -->
+  <div class="modal" id="appModal" hidden>
+    <div class="modal-box app-box">
+      <div class="panel-head">
+        <h2>Своя карта — в приложении</h2>
+        <button class="link" id="closeApp" type="button">закрыть ✕</button>
+      </div>
+      <p>Играть на своей карте можно только из <b>приложения «Застава»</b>. В приложении
+        вся игра на этой карте — раунды, бомба, боты — идёт на <b>твоём компьютере</b>,
+        а друзья заходят к тебе из обычного браузера по коду комнаты.</p>
+      <ol class="app-steps">
+        <li>Установи приложение (кнопка ниже) — оно встанет как обычная программа.</li>
+        <li>Открой «Заставу» из приложения → «Создать комнату» → «Своя карта».</li>
+        <li>Перетащи файл карты (<code>.zmap.json</code>) из редактора карт.</li>
+      </ol>
+      <div class="form-actions">
+        <button class="btn btn-main" id="appInstall" type="button">Скачать приложение</button>
+        <a class="btn btn-ghost" href="editor/" target="_blank" rel="noopener">Открыть редактор карт</a>
+      </div>
+      <p class="muted" id="appNote"></p>
+    </div>
+  </div>
+
+  <!-- ============================ ОРУЖИЕ ============================ -->
+  <section class="view" data-view="weapons">
+    <div class="armory-grid">
+      <section class="panel showcase">
+        <div class="stage3d">
+          <canvas id="gunCanvas"></canvas>
+          <p class="stage-hint">тащи мышью — покрутить</p>
+        </div>
+        <div class="showcase-info">
+          <div class="weapon-head"><b id="showName">Автомат</b><span class="slot" id="showSlot" hidden></span></div>
+          <i id="showAbout"></i>
+          <div class="bars" id="showBars"></div>
+          <h3 class="sub">Скин</h3>
+          <div class="skin-strip" id="skinStrip"></div>
+          <div class="weapon-foot" id="showFoot"></div>
+        </div>
+      </section>
+
+      <section class="panel armory">
+        <h2>Оружейная</h2>
+        <p class="armory-hint">
+          Монеты капают за убийства и за доигранный матч. В бой идут все купленные
+          стволы — каждый на своей цифре: 1, 2, 3… Нажми на ствол — он появится слева.
+        </p>
+        <div class="weapons" id="weapons"></div>
+
+        <h2>Ножи</h2>
+        <p class="armory-hint">
+          Нож есть у всех; остальные — за красоту: бьют все одинаково, два удара.
+          С ножом в руках бегаешь быстрее.
+        </p>
+        <div class="weapons" id="knives"></div>
+
+        <h2>Снаряжение</h2>
+        <p class="armory-hint">
+          Гранаты выдаются по одной каждую жизнь — купил один раз и носишь всегда.
+          В бою: <b>G</b> бросить, <b>H</b> сменить.
+        </p>
+        <div class="weapons" id="gear"></div>
+
+        <div class="note" id="shopNote"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============================ ИНВЕНТАРЬ ============================ -->
+  <section class="view" data-view="inventory">
+    <section class="panel">
+      <h2>В бой</h2>
+      <p class="armory-hint">Так выглядит полоса слотов в матче: каждый купленный ствол на своей цифре, за ними нож, граната и бомба (бомба — только у носильщика-террориста). Колесо мыши листает стволы и нож.</p>
+      <div class="loadout" id="loadoutSlots"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Коллекция скинов</h2>
+      <p class="armory-hint" id="skinHint">Скины открываются уровнем. Уровень растёт от очков — по десять за каждое убийство.</p>
+      <div class="skin-grid" id="skinGrid"></div>
+    </section>
+  </section>
+
+  <!-- ============================ ДРУЗЬЯ ============================ -->
+  <section class="view" data-view="friends">
+    <section class="panel narrow">
+      <h2>Найти</h2>
+      <div class="find-wrap">
+        <div class="join-row">
+          <input id="findInput" maxlength="24" placeholder="@тег или ник — подскажу по первым буквам" autocomplete="off" spellcheck="false">
+          <button class="btn btn-ghost" id="findBtn" type="button">Найти</button>
+        </div>
+        <div class="suggest" id="findSuggest" hidden></div>
+      </div>
+      <div class="note" id="friendNote"></div>
+      <div class="people" id="findResult"></div>
+
+      <div id="requestsBox" hidden>
+        <h3 class="sub">Зовут в друзья</h3>
+        <div class="people" id="requests"></div>
+      </div>
+
+      <h2>Друзья</h2>
+      <div class="people" id="friends">
+        <p class="empty">Друзей пока нет. Найди по тегу @ — он тот же, что в мессенджере.</p>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============================ АККАУНТ ============================ -->
+  <section class="view" data-view="account">
+    <div class="columns">
+      <div class="stack">
+        <section class="panel">
+          <h2>Профиль</h2>
+          <div class="account-card">
+            <div class="lvl big" id="accLevel">1</div>
+            <div>
+              <b id="accName">—</b>
+              <i id="accTag"></i>
+              <div class="xp"><u><i id="accXpBar"></i></u><em id="accXpText"></em></div>
+              <p class="armory-hint" id="accNext"></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Имя в игре</h2>
+          <!-- Просмотр: имя и кнопка «Изменить». Правка открывается по кнопке,
+               а не висит полем всегда — так случайно не сменишь. -->
+          <div class="field-row" id="nameView">
+            <div><span class="field-label">Сейчас</span><b id="nameNow">—</b></div>
+            <button class="btn btn-ghost tiny" id="nameEditBtn" type="button">Изменить</button>
+          </div>
+          <form class="name-form" id="nameForm" hidden>
+            <label class="field-label" for="nickInput">Новое имя</label>
+            <input id="nickInput" maxlength="18" placeholder="Как тебя звать в бою" autocomplete="off" spellcheck="false">
+            <div class="name-rules">
+              <span id="nickCount">0 / 18</span>
+              <span>от 2 до 18 символов · без &lt; &gt; и @</span>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-main" id="nickBtn" type="submit">Сохранить</button>
+              <button class="btn btn-ghost" id="nameCancelBtn" type="button">Отмена</button>
+            </div>
+          </form>
+          <p class="armory-hint">Так тебя видят над головой, в табло и в поиске друзей. Имя и тег в мессенджере не меняются.</p>
+          <div class="note" id="nickNote"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Статистика</h2>
+          <div class="stat-grid" id="accStats"></div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel">
+          <h2>Вход</h2>
+          <div class="login-method" id="loginMethod"></div>
+          <dl class="facts" id="accFacts"></dl>
+          <button class="btn btn-ghost" id="linkMyPealBtn" type="button" hidden>Привязать аккаунт MyPeal</button>
+          <button class="btn btn-google" id="googleSwitchBtn" type="button" hidden>
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+            Войти другим аккаунтом Google
+          </button>
+        </section>
+
+        <section class="panel">
+          <h2>Приложение</h2>
+          <div class="account-actions">
+            <button class="btn btn-ghost" id="installBtn" type="button" hidden>Установить</button>
+            <a class="btn btn-ghost" href="install.html">На телефон</a>
+            <button class="btn btn-ghost" id="mypealBtn" type="button">Открыть MyPeal</button>
+          </div>
+        </section>
+
+        <section class="panel danger-zone">
+          <h2>Выход и сброс</h2>
+          <p class="armory-hint">Сброс касается только этого устройства: настройки, клавиши, скины и выбранный нож. Покупки и статистика останутся.</p>
+          <div class="account-actions">
+            <button class="btn btn-ghost" id="resetLocalBtn" type="button">Сбросить настройки</button>
+            <button class="btn btn-danger" id="outBtn" type="button">Выйти из аккаунта</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ КОНСОЛЬ ============================ -->
+  <section class="view" data-view="console">
+    <section class="panel console-gate" id="consoleGate">
+      <h2>Консоль администратора</h2>
+      <p class="armory-hint">Введи пароль консоли. Права всё равно проверяет база — без аккаунта администратора команды не выполнятся.</p>
+      <form class="join-row" id="consoleForm">
+        <input id="consolePass" type="password" autocomplete="off" placeholder="Пароль" spellcheck="false">
+        <button class="btn btn-main" type="submit">Открыть</button>
+      </form>
+      <div class="note" id="consoleNote"></div>
+    </section>
+
+    <section class="panel console" id="consoleBox" hidden>
+      <div class="panel-head">
+        <h2>Консоль</h2>
+        <span class="console-state" id="consoleState">…</span>
+      </div>
+      <div class="console-quick" id="consoleQuick">
+        <button type="button" data-cmd="status">status</button>
+        <button type="button" data-cmd="online">online</button>
+        <button type="button" data-cmd="bans">bans</button>
+        <button type="button" data-cmd="rooms">rooms</button>
+        <button type="button" data-cmd="users">users</button>
+        <button type="button" data-cmd="servers off">servers off</button>
+        <button type="button" data-cmd="servers on">servers on</button>
+        <button type="button" data-cmd="help">help</button>
+      </div>
+      <div class="console-log" id="consoleLog"></div>
+      <form class="console-line" id="consoleLine">
+        <span>&gt;</span>
+        <input id="consoleInput" autocomplete="off" spellcheck="false" placeholder="ban @тег причина · help">
+      </form>
+    </section>
+  </section>
+
+  <!-- ============================ НАСТРОЙКИ ============================ -->
+  <section class="view" data-view="settings">
+    <div class="columns">
+      <section class="panel">
+        <h2>Мышь и обзор</h2>
+        <label class="slider-row">
+          <span>Чувствительность</span>
+          <input type="range" id="setSens">
+          <b id="setSensValue">1.00</b>
+        </label>
+        <label class="slider-row">
+          <span>Угол обзора</span>
+          <input type="range" id="setFov">
+          <b id="setFovValue">78°</b>
+        </label>
+
+        <h2>Графика</h2>
+        <div class="chips" id="setQuality"></div>
+
+        <h2>Громкость</h2>
+        <label class="slider-row">
+          <span>Звук</span>
+          <input type="range" id="setVolume" min="0" max="100" step="1">
+          <b id="setVolumeValue">70</b>
+        </label>
+      </section>
+
+      <section class="panel">
+        <h2>Прицел</h2>
+        <div class="cross-box" id="crossBox"><div class="cross-preview"><i></i><i></i><i></i><i></i></div></div>
+        <div class="chips" id="setCross"></div>
+        <div class="swatches" id="setCrossColor"></div>
+        <label class="slider-row">
+          <span>Размер</span>
+          <input type="range" id="setCrossSize">
+          <b id="setCrossSizeValue">1.0</b>
+        </label>
+        <p class="armory-hint">Настройки хранятся на этом устройстве и применяются со следующего захода в матч.</p>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Клавиши</h2>
+        <button class="link" id="bindResetBtn" type="button">вернуть как было</button>
+      </div>
+      <p class="armory-hint">Нажми на клавишу справа от действия, потом — новую. Занятая клавиша поменяется местами. Цифры 1…9 — слоты оружия, Esc — пауза; Ctrl занять нельзя: Ctrl+W закрывает вкладку.</p>
+      <div class="binds" id="bindList"></div>
+      <div class="note" id="bindNote"></div>
+    </section>
+
+    <footer class="hints touch-hints">
+      <span><b>Слева</b> стик движения</span>
+      <span><b>Справа</b> обзор пальцем</span>
+      <span><b>Огонь</b> большая кнопка</span>
+      <span><b>Граната</b> держать — сменить</span>
+      <span><b>Дело</b> держать на точке</span>
+      <span><b>Счёт вверху</b> табло</span>
+      <span><b>II</b> пауза и выход</span>
+    </footer>
+
+
+  </section>
+
+</div>
+
+<script type="module" src="js/lobby.js"></script>
+</body>
+</html>

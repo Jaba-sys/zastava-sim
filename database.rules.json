@@ -1,0 +1,213 @@
+// Правила Realtime Database.
+// Консоль Firebase -> Realtime Database -> Rules, вставить целиком и Publish.
+//
+// Главное, что надо знать про эти правила: в Realtime Database право на запись
+// НАСЛЕДУЕТСЯ вниз и не отзывается. Если разрешить .write на уровне
+// rooms/$room, то любые более строгие правила внутри уже ничего не значат —
+// игрок сможет писать и в чужого бойца, и в чужой счёт. Поэтому разрешения тут
+// выданы как можно глубже: каждому своё поддерево.
+//
+// Кто может снести комнату. Раньше — только её создатель. Это давало вечный
+// мусор: хозяин уходил, комната оставалась в списке навсегда, потому что
+// убрать её было уже некому. Теперь снести комнату может либо создатель (ключ
+// его сессии лежит в meta/hostSession), либо ЛЮБОЙ вошедший — но только если в
+// комнате не осталось ни одного игрока. Запись в roomIndex устроена так же:
+// чужую карточку можно стереть лишь тогда, когда самой комнаты уже нет.
+//
+// Чего здесь НЕТ и почему: лимита игроков. Язык правил Realtime Database не
+// умеет считать детей узла — numChildren() есть у снимка в клиентской
+// библиотеке, но не у RuleDataSnapshot в правилах, и попытка его вызвать
+// отвергается редактором ("No such method/property 'numChildren'"). Обойти это
+// можно только счётчиком, который ведут сами клиенты, — то есть той же защитой
+// на доверии, но с видом настоящей. Поэтому число игроков проверяется в лобби
+// и на входе в матч, ровно как и урон: см. раздел README «Что здесь честно, а
+// что на доверии».
+{
+  "rules": {
+    "roomIndex": {
+      ".read": "auth != null",
+      "$room": {
+        // Карточку постоянного сервера не стирает никто: его ведут по очереди
+        // все, кто в нём есть, и «хозяина» у него нет вовсе.
+        ".write": "auth != null && ((data.exists() && data.child('permanent').val() === true && newData.exists()) || !data.exists() || data.child('hostSession').val() === auth.uid || (!newData.exists() && !root.child('rooms').child($room).exists()))",
+        ".validate": "!newData.exists() || newData.hasChildren(['map', 'mode', 'host', 'hostSession'])",
+
+        // Пульс и счётчик игроков обновляет любой, кто сидит в комнате:
+        // так комната не пропадает из списка, когда хозяин закрыл вкладку.
+        "beat":  { ".write": "auth != null", ".validate": "newData.isNumber()" },
+        "count": { ".write": "auth != null", ".validate": "newData.isNumber() && newData.val() >= 0" },
+
+        "maxPlayers": { ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 16" },
+        "priv":       { ".validate": "newData.isBoolean()" }
+      }
+    },
+
+    // Кто сейчас играет и где. Ключ — сессия, а не аккаунт: сверять личность
+    // правила умеют только с auth.uid, а он анонимный. Uid из мессенджера идёт
+    // полем внутри, и на нём ничего, кроме показа в списке, не держится.
+    // Кто сейчас в бою под этим аккаунтом — чтобы один аккаунт не играл с
+    // двух устройств (или из двух вкладок) сразу. Ключ — аккаунт, внутри —
+    // сессия и вкладка, которые им играют. Записать можно только СВОЮ сессию
+    // (перехват «играть здесь» — тоже от себя), стереть — только свою запись.
+    "playing": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && ((newData.exists() && newData.child('session').val() === auth.uid) || (!newData.exists() && data.child('session').val() === auth.uid))",
+        ".validate": "!newData.exists() || newData.hasChildren(['session', 'tab', 'at'])",
+        "session": { ".validate": "newData.isString() && newData.val().length <= 128" },
+        "tab":     { ".validate": "newData.isString() && newData.val().length <= 24" },
+        "room":    { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "at":      { ".validate": "newData.isNumber()" }
+      }
+    },
+
+    "presence": {
+      ".read": "auth != null",
+      "$session": {
+        ".write": "auth != null && auth.uid === $session",
+        ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'nick']) && newData.child('nick').val().length <= 24)",
+        "at":   { ".validate": "newData.isNumber()" },
+        "room": { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "map":  { ".validate": "newData.isString() && newData.val().length <= 16" },
+        "mode": { ".validate": "newData.isString() && newData.val().length <= 8" }
+      }
+    },
+
+    "rooms": {
+      "$room": {
+        ".read": "auth != null",
+
+        // Снести комнату может создатель — или кто угодно, если она уже пуста.
+        // Постоянную не сносит никто и никогда: она на то и постоянная.
+        ".write": "auth != null && data.exists() && !newData.exists() && data.child('meta/permanent').val() !== true && (data.child('meta/hostSession').val() === auth.uid || !data.child('players').exists())",
+
+        "meta": {
+          // У постоянного сервера meta правит любой, кто в нём: раунды крутит
+          // тот, чей ключ сессии меньше всех, а он меняется сам собой, когда
+          // прежний ведущий вышел. Спрашивать разрешения не у кого — своего
+          // сервера у игры нет; это та же честность, что и с уроном.
+          ".write": "auth != null && (!data.exists() || data.child('hostSession').val() === auth.uid || data.child('permanent').val() === true)",
+          ".validate": "newData.hasChildren(['map', 'mode'])",
+          "maxPlayers": { ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 16" },
+          "priv":       { ".validate": "newData.isBoolean()" },
+          "permanent":  { ".validate": "newData.isBoolean()" },
+          "round":      { ".validate": "newData.isNumber() && newData.val() >= 1" },
+          "roundEnds":  { ".validate": "newData.isNumber()" },
+          "scoreA":     { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "scoreB":     { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "customName": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "hostKeeper": { ".validate": "newData.isBoolean()" },
+          "bots":       { ".validate": "newData.isBoolean()" }
+        },
+
+        // Своя карта игрока (из редактора карт) — строка JSON до 400 КБ.
+        // Пишет только хозяин комнаты, читают все вошедшие.
+        "custom": {
+          ".write": "auth != null && root.child('rooms').child($room).child('meta/hostSession').val() === auth.uid",
+          ".validate": "newData.isString() && newData.val().length <= 400000"
+        },
+
+        "players": {
+          "$session": {
+            // Каждый пишет только в своего бойца.
+            //
+            // Лимита игроков ЗДЕСЬ НЕТ, и это не забывчивость. Язык правил
+            // Realtime Database не умеет считать детей: numChildren() есть у
+            // снимка в клиентской библиотеке, но не у RuleDataSnapshot, а
+            // обойти это можно только счётчиком, который ведут сами клиенты, —
+            // то есть такой же "защитой на доверии", только с видом настоящей.
+            // Поэтому число игроков проверяется в лобби и на входе в матч
+            // (net.roomCapacity), ровно как и урон: см. раздел README
+            // "Что здесь честно, а что на доверии".
+            ".write": "auth != null && auth.uid === $session",
+            ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'name']) && newData.child('name').val().length <= 40)",
+            "hp":     { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "kills":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "deaths": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "x":   { ".validate": "newData.isNumber()" },
+            "y":   { ".validate": "newData.isNumber()" },
+            "z":   { ".validate": "newData.isNumber()" },
+            "yaw": { ".validate": "newData.isNumber()" },
+            "pitch": { ".validate": "newData.isNumber()" },
+            "w": { ".validate": "newData.isString() && newData.val().length <= 12" },
+            "away": { ".validate": "newData.isBoolean()" },
+            "ag":   { ".validate": "newData.isString() && newData.val().length <= 12" }
+          }
+        },
+
+        // Боты. Их ведёт ОДИН клиент — тот же, что крутит раунды, — и пишет
+        // сюда всех разом. Ключ тут не сессия, поэтому сверять auth.uid не с
+        // чем: бот не принадлежит никому лично, и ведущий у него меняется сам
+        // собой, когда прежний вышел. Отсюда и .write для любого вошедшего.
+        //
+        // Почему боты НЕ в players: там правило auth.uid === $session, и оно
+        // должно таким остаться — иначе любой писал бы в чужого бойца. Бота под
+        // это правило не подвести, не ослабив его для людей. Отдельная ветка
+        // решает это, ничего не ломая: сюда можно писать, туда — нельзя.
+        "bots": {
+          ".write": "auth != null",
+          "$bot": {
+            ".validate": "!newData.exists() || (newData.hasChildren(['name', 'team']) && newData.child('name').val().length <= 24)",
+            "hp":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "x":     { ".validate": "newData.isNumber()" },
+            "y":     { ".validate": "newData.isNumber()" },
+            "z":     { ".validate": "newData.isNumber()" },
+            "yaw":   { ".validate": "newData.isNumber()" },
+            "pitch": { ".validate": "newData.isNumber()" },
+            "team":  { ".validate": "newData.isString() && newData.val().length <= 4" },
+            "w":     { ".validate": "newData.isString() && newData.val().length <= 12" },
+            "bot":   { ".validate": "newData.isBoolean()" }
+          }
+        },
+
+        // Бомба. Пишет её клиент — тот, кто закладывает или снимает. Проверить
+        // это правилами нельзя: они не знают ни где игрок стоит, ни сколько он
+        // там простоял. Та же честность на доверии, что и с уроном.
+        "bomb": {
+          ".write": "auth != null",
+          ".validate": "!newData.exists() || newData.hasChild('state')",
+          "state": { ".validate": "newData.isString() && newData.val().length <= 10" },
+          "site":  { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
+          "at":    { ".validate": "newData.isNumber()" },
+          "x": { ".validate": "newData.isNumber()" },
+          "y": { ".validate": "newData.isNumber()" },
+          "z": { ".validate": "newData.isNumber()" },
+          // у кого бомба (ключ сессии или "bot:N") и «закладывают!» для спецназа
+          "carrier":  { ".validate": "newData.isString() && newData.val().length <= 64" },
+          "planting": { ".validate": "newData.isNumber()" },
+          "psite":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" }
+        },
+
+        // Просьба впустить в закрытую комнату. Друг игрока, сидящего в закрытой
+        // комнате, стучится сюда; хозяин комнаты видит просьбу в бою и отвечает.
+        // Постучать можно только от себя (ключ — своя сессия), а ответить
+        // (answer) — только хозяин: иначе просящий впустил бы себя сам.
+        "knock": {
+          "$session": {
+            ".write": "auth != null && (auth.uid === $session || root.child('rooms').child($room).child('meta/hostSession').val() === auth.uid)",
+            ".validate": "!newData.exists() || newData.hasChildren(['uid', 'nick'])",
+            "nick":     { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "friendOf": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "at":       { ".validate": "newData.isNumber()" },
+            "answer":   { ".validate": "(newData.val() === 'yes' || newData.val() === 'no') && root.child('rooms').child($room).child('meta/hostSession').val() === auth.uid" }
+          }
+        },
+
+        "events": {
+          ".write": "auth != null",
+          "$event": {
+            ".validate": "!newData.exists() || (newData.hasChildren(['type', 't']) && newData.child('type').val().length <= 12)"
+          }
+        },
+
+        "chat": {
+          "$message": {
+            // сообщение можно только добавить: ни переписать, ни стереть чужое
+            ".write": "auth != null && !data.exists() && newData.exists()",
+            ".validate": "newData.hasChildren(['uid', 'name', 'text']) && newData.child('text').val().length <= 200 && newData.child('text').val().length > 0"
+          }
+        }
+      }
+    }
+  }
+}
