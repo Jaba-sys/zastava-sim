@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Симулятор карт — Застава</title>
+<link rel="stylesheet" href="css/sim.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- прицел и показатели -->
+<div id="cross"><i></i><i></i><i></i><i></i></div>
+<div id="hud">
+  <div class="chip" id="mapName">—</div>
+  <div class="chip" id="mode">Бег</div>
+  <div class="chip" id="speed">0.0 м/с</div>
+  <div class="chip" id="pos">x 0 · z 0 · высота 0</div>
+</div>
+<div id="timer"><b id="timerMain">0.0 с</b><span id="timerSub">иди к точке A или B</span></div>
+<div id="toast"></div>
+<div id="keys">WASD — ходить · Shift — бег · C — присесть · бег + C — подкат · Space — прыжок · V — полёт · R — заново · ЛКМ — выстрел · Esc — меню</div>
+
+<!-- меню -->
+<div id="menu">
+  <div class="box">
+    <div class="head">
+      <b>ЗАСТАВА</b><span>симулятор карт</span>
+    </div>
+    <p class="lead">Пробеги по карте от первого лица: как в игре — та же физика, бег, прыжок, подкат.
+      Секундомер покажет, за сколько каждая сторона добегает до точек A и B.</p>
+
+    <h3>Карта</h3>
+    <div class="row">
+      <select id="official">
+        <option value="">— карта игры —</option>
+        <option value="arena">Арена</option>
+        <option value="poligon">Полигон</option>
+        <option value="port">Порт</option>
+        <option value="karier">Карьер</option>
+        <option value="depo">Депо</option>
+        <option value="teplitsy">Теплицы</option>
+        <option value="plotina">Плотина</option>
+      </select>
+      <button class="btn" id="openFile" type="button">Открыть файл…</button>
+      <input type="file" id="fileIn" accept=".json,.zmap,.js,application/json,text/javascript" hidden>
+      <button class="btn" id="fromEditor" type="button" hidden>Из редактора</button>
+    </div>
+    <p class="muted" id="loaded">Карта не выбрана. Можно перетащить файл карты (.zmap.json) прямо сюда.</p>
+
+    <h3>Сторона</h3>
+    <div class="row sides">
+      <button class="btn side on" data-side="a" type="button"><i class="dot t"></i>Террористы</button>
+      <button class="btn side" data-side="b" type="button"><i class="dot ct"></i>Спецназ</button>
+    </div>
+    <label class="check"><input type="checkbox" id="targets" checked> Мишени на базе врага и на точках (стрелять ЛКМ)</label>
+
+    <div class="row actions">
+      <button class="btn main" id="play" type="button" disabled>Играть</button>
+      <a class="btn" id="editorLink" href="#" target="_blank" rel="noopener">Редактор карт</a>
+    </div>
+
+    <h3>Время до точек</h3>
+    <table id="times"><tr><th></th><th>до A</th><th>до B</th></tr>
+      <tr><td><i class="dot t"></i>Т</td><td id="tA_a">—</td><td id="tA_b">—</td></tr>
+      <tr><td><i class="dot ct"></i>СН</td><td id="tB_a">—</td><td id="tB_b">—</td></tr></table>
+    <p class="muted">Лучшее время от возрождения до круга точки. Хорошая карта — когда спецназ
+      успевает на свою точку чуть раньше террористов.</p>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+</script>
+<script type="module" src="js/sim.js"></script>
+</body>
+</html>

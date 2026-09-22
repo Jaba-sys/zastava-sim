@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор карт — Застава</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+<header>
+  <div class="logo">ЗАСТАВА <span>· редактор карт</span></div>
+  <button class="btn" id="bNew" title="Начать новую карту">Новая</button>
+  <button class="btn" id="bOpen" title="Открыть файл карты (.json)">Открыть…</button>
+  <input type="file" id="fileIn" accept=".json,.zmap,.js,application/json,text/javascript" hidden>
+  <select class="btn" id="officialMaps" title="Открыть карту игры как заготовку">
+    <option value="">Карты игры…</option>
+    <option value="arena">Арена</option>
+    <option value="poligon">Полигон</option>
+    <option value="port">Порт</option>
+    <option value="karier">Карьер</option>
+    <option value="depo">Депо</option>
+    <option value="teplitsy">Теплицы</option>
+    <option value="plotina">Плотина</option>
+  </select>
+  <button class="btn hide-sm" id="bSim" title="Пробежаться по этой карте от первого лица в симуляторе">Пробежать ▶</button>
+  <button class="btn main" id="bSave" title="Скачать карту — этот файл отправляешь создателю">Скачать карту</button>
+  <div class="views" id="views">
+    <button class="btn on" data-view="top" title="Сверху — план (как раньше)">Сверху</button>
+    <button class="btn" data-view="front" title="Спереди — видно высоту; тяни верх блока, чтобы менять высоту">Спереди</button>
+    <button class="btn" data-view="side" title="Сбоку — видно высоту с другой стороны">Сбоку</button>
+    <button class="btn" data-view="3d" title="3D: крутить вид, двигать блоки, тянуть жёлтую стрелку — высота">3D</button>
+  </div>
+  <div class="sp"></div>
+  <button class="btn hide-sm" id="bUndo" title="Отменить (Ctrl+Z)">↶</button>
+  <button class="btn hide-sm" id="bRedo" title="Вернуть (Ctrl+Y)">↷</button>
+  <button class="btn" id="bMirror" title="Зеркально: всё, что ставишь, повторяется на другой стороне (M)">Зеркало</button>
+  <button class="btn hide-sm" id="bGame" title="Для создателя игры: файл-модуль, который кладут в js/game/maps/">Файл для игры (.js)</button>
+  <button class="btn" id="bHelp">?</button>
+  <button class="btn" id="bProps" style="display:none">☰</button>
+</header>
+
+<div id="app">
+  <nav id="tools">
+    <button class="tool on" data-tool="select" title="Выбрать и двигать (V)"><kbd>V</kbd>⬚<small>Выбор</small></button>
+    <button class="tool" data-tool="box" title="Блок / стена: тяни мышью (B)"><kbd>B</kbd>■<small>Блок</small></button>
+    <button class="tool" data-tool="ramp" title="Пандус: тяни мышью, R — повернуть подъём (P)"><kbd>P</kbd>◢<small>Пандус</small></button>
+    <div class="tools-sep"></div>
+    <button class="tool" data-tool="siteA" title="Точка закладки A (1)"><kbd>1</kbd><b style="color:var(--accent)">A</b><small>Точка</small></button>
+    <button class="tool" data-tool="siteB" title="Точка закладки B (2)"><kbd>2</kbd><b style="color:var(--accent)">B</b><small>Точка</small></button>
+    <button class="tool" data-tool="spawnA" title="Возрождение террористов (T)"><kbd>T</kbd><b style="color:var(--t)">●</b><small>Т</small></button>
+    <button class="tool" data-tool="spawnB" title="Возрождение спецназа (C)"><kbd>C</kbd><b style="color:var(--ct)">●</b><small>СН</small></button>
+    <div class="tools-sep"></div>
+    <button class="tool" data-tool="erase" title="Удалить: кликни по объекту (E)"><kbd>E</kbd>✕<small>Стереть</small></button>
+    <button class="tool" data-tool="pan" title="Двигать вид (H). Или правая кнопка мыши"><kbd>H</kbd>✋<small>Вид</small></button>
+  </nav>
+
+  <main id="stage">
+    <canvas id="plan"></canvas>
+    <div id="view3d"></div>
+    <div id="stageHint"></div>
+    <div id="coords"></div>
+  </main>
+
+  <aside id="props">
+    <h3>Выбранное</h3>
+    <div id="selPanel" class="muted">Ничего не выбрано. Инструмент «Выбор» (V) — кликни по объекту.</div>
+
+    <h3>Новый блок</h3>
+    <div class="pair">
+      <div class="row"><label>Н</label><input type="number" id="newH" value="2.4" step="0.1" min="0.1" title="Высота нового блока, м"></div>
+      <div class="row"><label>Низ</label><input type="number" id="newY" value="0" step="0.1" min="0" title="На какой высоте низ блока, м"></div>
+    </div>
+    <div class="row"><label>Цвет</label><input type="color" id="newColor" value="#8e949e"></div>
+    <div class="swatches" id="swatches"></div>
+    <div class="row"><label>На верх</label><input type="checkbox" id="stackOn" checked><span class="muted">ставить на то, что под ним</span></div>
+    <div class="row"><label>Шаг сетки</label><select id="snap"><option value="0.25">0.25 м</option><option value="0.5" selected>0.5 м</option><option value="1">1 м</option></select></div>
+
+    <h3>Карта</h3>
+    <div class="row"><label>Название</label><input type="text" id="mName" maxlength="40"></div>
+    <div class="row"><label>Код (латиница)</label><input type="text" id="mId" maxlength="16"></div>
+    <div class="row"><label>Описание</label><input type="text" id="mSub" maxlength="80"></div>
+    <div class="row"><label>Подсказка</label><input type="text" id="mHint" maxlength="160"></div>
+    <div class="pair">
+      <div class="row"><label>Ш</label><input type="number" id="mW" min="30" max="200" step="2" title="Ширина карты, м"></div>
+      <div class="row"><label>Г</label><input type="number" id="mD" min="30" max="200" step="2" title="Глубина карты, м"></div>
+    </div>
+    <div class="row"><label>Пол</label><input type="color" id="mFloor"></div>
+    <div class="row"><label>Небо</label><input type="color" id="mSky"></div>
+    <div class="row"><label>Свет</label><select id="mLight"><option value="day">День</option><option value="evening">Вечер</option><option value="night">Ночь</option></select></div>
+    <div class="row"><label>Бортик</label><input type="checkbox" id="mBorder"><span class="muted">видимый край карты</span></div>
+
+    <h3>Проверка</h3>
+    <ul id="checks"></ul>
+    <p class="muted" id="stat"></p>
+  </aside>
+</div>
+
+<div id="toast"></div>
+
+<dialog id="help">
+  <h2>Как сделать карту для «Заставы»</h2>
+  <ol>
+    <li><b>Блоки</b> (B) — тяни мышью прямоугольник. Высота и цвет — справа. Можно ставить блок на блок: включено «на верх».</li>
+    <li><b>Пандусы</b> (P) — чтобы забираться наверх. Тяни прямоугольник; <b>R</b> — повернуть, в какую сторону подъём. Высоту подъёма поставь равной высоте площадки.</li>
+    <li><b>Точки A и B</b> (1, 2) — где закладывают бомбу. Нужны обе.</li>
+    <li><b>Возрождения</b>: террористы (T) — обычно слева (запад), спецназ (C) — справа. Минимум по 2 на сторону.</li>
+    <li><b>Зеркало</b> (M) — всё, что ставишь, повторяется на другой половине: так карта честная для обеих сторон.</li>
+    <li>Выбор (V): двигать мышью, тянуть за углы — менять размер. <b>Del</b> — удалить, <b>Ctrl+D</b> — копия, <b>Ctrl+Z</b> — отменить.</li>
+    <li>Вид: колесо — приблизить, правая кнопка — двигать.</li>
+    <li><b>Спереди / Сбоку</b> — видно высоту. Тяни блок — двигать вбок и вверх-вниз; тяни <b>верхний край</b> — высота; нижний край — поднять низ; боковые края — ширина.</li>
+    <li><b>3D</b> — крути вид мышью. Кликни блок и тяни — двигать по земле; <b>Shift</b> + тянуть — поднимать; <b>жёлтая стрелка</b> над блоком — высота. Инструментом «Блок» кликни по земле или по верху блока — поставишь новый.</li>
+    <li>Клавиши: <b>PageUp / PageDown</b> — поднять / опустить выбранное, <b>+ / −</b> — выше / ниже.</li>
+    <li><b>Открыть…</b> или просто перетащи файл на страницу — откроется карта (<code>.zmap.json</code> или «Файл для игры» <code>.js</code>). «Карты игры…» — взять карту «Заставы» как заготовку.</li>
+    <li>Справа внизу — <b>проверка</b>: когда всё зелёное, нажми <b>«Скачать карту»</b> и отправь файл создателю игры (например, в мессенджере MyPeal).</li>
+  </ol>
+  <p class="muted">Карта сохраняется в браузере сама — можно закрыть страницу и продолжить позже.</p>
+  <form method="dialog"><button class="btn main">Понятно</button></form>
+</dialog>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

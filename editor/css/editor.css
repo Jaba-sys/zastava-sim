@@ -1,0 +1,83 @@
+/* editor.css — оформление редактора карт «Заставы». */
+:root{
+  --bg:#16191b; --panel:#1f2326; --panel2:#262b2f; --line:#343a3f; --text:#ece7db; --muted:#9a968c;
+  --accent:#e8a317; --t:#e8a317; --ct:#5aa0d2; --danger:#e0473c; --ok:#58c27d; --r:8px;
+}
+*{box-sizing:border-box}
+html,body{margin:0; height:100%; background:var(--bg); color:var(--text);
+  font:14px/1.4 "Segoe UI", system-ui, sans-serif; overflow:hidden}
+button,input,select{font:inherit; color:inherit}
+header{height:52px; display:flex; align-items:center; gap:8px; padding:0 12px;
+  background:var(--panel); border-bottom:1px solid var(--line)}
+header .logo{font-weight:800; letter-spacing:.06em; color:var(--accent); margin-right:10px; white-space:nowrap}
+header .logo span{color:var(--muted); font-weight:500; letter-spacing:0}
+header .sp{flex:1}
+.btn{background:var(--panel2); border:1px solid var(--line); border-radius:var(--r); padding:7px 12px;
+  cursor:pointer; white-space:nowrap}
+.btn:hover{border-color:#566}
+.btn.main{background:var(--accent); color:#1b1406; border-color:var(--accent); font-weight:700}
+.btn.on{border-color:var(--accent); color:var(--accent)}
+#app{display:grid; grid-template-columns:62px 1fr 300px; height:calc(100% - 52px)}
+#tools{background:var(--panel); border-right:1px solid var(--line); padding:8px 6px; display:flex;
+  flex-direction:column; gap:6px; overflow-y:auto}
+.tool{width:48px; height:48px; border-radius:var(--r); border:1px solid var(--line); background:var(--panel2);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; position:relative;
+  font-size:18px; line-height:1}
+.tool small{font-size:9.5px; color:var(--muted); margin-top:3px}
+.tool kbd{position:absolute; right:3px; top:2px; font-size:9px; color:var(--muted); font-family:inherit}
+.tool.on{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset}
+.tool.on small{color:var(--accent)}
+.tools-sep{height:1px; background:var(--line); margin:4px 0}
+#stage{position:relative; overflow:hidden}
+#plan{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair}
+#view3d{position:absolute; inset:0; display:none; background:#000}
+#view3d.show{display:block}
+#view3d canvas{display:block}
+#stageHint{position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.55); padding:6px 10px;
+  border-radius:var(--r); color:#d8d2c4; font-size:12.5px; pointer-events:none; max-width:70%}
+#coords{position:absolute; right:10px; bottom:10px; background:rgba(0,0,0,.55); padding:4px 8px;
+  border-radius:var(--r); font-size:12px; color:#cfc9bb; pointer-events:none}
+#props{background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:10px 12px 40px}
+#props h3{margin:14px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted)}
+#props h3:first-child{margin-top:2px}
+.row{display:flex; align-items:center; gap:8px; margin:6px 0}
+.row label{width:96px; color:#cfc9bb; font-size:13px; flex:none}
+.row input[type=text], .row input[type=number], .row select{flex:1; min-width:0; background:var(--panel2);
+  border:1px solid var(--line); border-radius:6px; padding:5px 7px}
+.row input[type=color]{width:40px; height:30px; padding:0; border:1px solid var(--line); border-radius:6px; background:none}
+.row input[type=checkbox]{width:16px; height:16px}
+.pair{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px}
+.pair .row{min-width:0}
+.pair .row label{width:auto; min-width:18px; max-width:52px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.row input[type=number]{width:100%}
+.swatches{display:flex; flex-wrap:wrap; gap:5px; margin:6px 0}
+.swatches i{width:22px; height:22px; border-radius:5px; cursor:pointer; border:1px solid rgba(255,255,255,.18)}
+.muted{color:var(--muted); font-size:12.5px}
+#checks{list-style:none; padding:0; margin:0}
+#checks li{padding:5px 0 5px 22px; position:relative; font-size:13px; border-bottom:1px solid #2a2f33}
+#checks li::before{position:absolute; left:2px; top:5px; font-weight:800}
+#checks li.ok::before{content:"✓"; color:var(--ok)}
+#checks li.bad::before{content:"✗"; color:var(--danger)}
+#checks li.warn::before{content:"!"; color:var(--accent); left:6px}
+.selbox{background:var(--panel2); border:1px solid var(--line); border-radius:var(--r); padding:8px 10px}
+.btnrow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+#toast{position:fixed; left:50%; top:64px; transform:translateX(-50%); background:#2c3236; border:1px solid var(--line);
+  padding:8px 14px; border-radius:var(--r); opacity:0; transition:opacity .2s; pointer-events:none; z-index:10}
+#toast.show{opacity:1}
+dialog{background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:12px; max-width:560px; padding:18px 20px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog h2{margin:0 0 10px; font-size:18px}
+dialog p, dialog li{color:#d6d0c2; font-size:13.5px}
+@media (max-width: 900px){
+  #app{grid-template-columns:58px 1fr}
+  #props{position:fixed; right:0; top:52px; bottom:0; width:280px; transform:translateX(100%); transition:transform .2s; z-index:5}
+  #props.open{transform:none}
+  header .hide-sm{display:none}
+}
+
+.views{display:flex; gap:0}
+.views .btn{border-radius:0; margin-left:-1px}
+.views .btn:first-child{border-radius:var(--r) 0 0 var(--r)}
+.views .btn:last-child{border-radius:0 var(--r) var(--r) 0}
+.views .btn.on{background:#3a3222; border-color:var(--accent); color:var(--accent); position:relative; z-index:1}
+@media (max-width: 900px){ .views .btn{padding:7px 8px} }
